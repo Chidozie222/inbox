@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <input type="text" placeholder="Your Pefered user name" id="username">
+    <input type="password" placeholder="your password" id="password">
+    <button>sign up</button>
+
+<script>
+    let btn = document.querySelector('button')
+
+    btn.addEventListener("click", () => {
+        const username = document.getElementById("username").value;
+        const password = document.getElementById("password").value;
+
+        fetch("http://localhost:5000/api/auth/register", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"  // ✅ correct header
+            },
+            body: JSON.stringify({ username: username, password: password }) // ✅ must stringify
+        })
+        .then(res => res.json())
+        .then(res => console.log("✅ Response:", res))
+        .catch(err => console.error("❌ Error:", err))
+    })
+</script>
+
+</body>
+</html>

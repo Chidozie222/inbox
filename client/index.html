@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Chat App</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    :root {
+      --color-bg: #0d1117;
+      --color-bg-alt: #161b22;
+      --color-surface: #1c2128;
+      --color-border: #30363d;
+      --color-text: #c9d1d9;
+      --color-text-muted: #8b949e;
+      --color-white: #ffffff;
+
+      --color-gradient-start: #3a7bd5;
+      --color-gradient-mid: #8e2de2;
+      --color-gradient-accent: #ff006a;
+      --color-gradient-hot: #ff7300;
+      --color-gradient-warm: #ffcc00;
+
+      --color-primary: var(--color-gradient-mid);
+      --color-primary-hover: var(--color-gradient-accent);
+      --color-success: #3fb950;
+      --color-danger: #f85149;
+      --color-warning: #d29922;
+
+      --gradient-main: linear-gradient(
+        135deg,
+        var(--color-gradient-start),
+        var(--color-gradient-mid),
+        var(--color-gradient-accent),
+        var(--color-gradient-hot),
+        var(--color-gradient-warm)
+      );
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      background: var(--color-bg);
+      color: var(--color-text);
+      height: 100vh;
+      display: flex;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 300px;
+      background: var(--color-bg-alt);
+      border-right: 1px solid var(--color-border);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-header {
+      padding: 15px;
+      border-bottom: 1px solid var(--color-border);
+      font-weight: bold;
+      font-size: 18px;
+      background: var(--gradient-main);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .chat-list {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .chat-item {
+      padding: 12px 15px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--color-border);
+      transition: background 0.2s;
+    }
+
+    .chat-item:hover {
+      background: var(--color-surface);
+    }
+
+    .chat-item b {
+      color: var(--color-white);
+    }
+
+    /* Chat area */
+    .chat-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--color-bg);
+    }
+
+    .chat-header {
+      padding: 15px;
+      border-bottom: 1px solid var(--color-border);
+      font-weight: bold;
+      background: var(--color-surface);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .messages {
+      flex: 1;
+      padding: 15px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .message {
+      max-width: 70%;
+      padding: 10px 15px;
+      border-radius: 15px;
+      line-height: 1.4;
+    }
+
+    .message.sent {
+      align-self: flex-end;
+      background: var(--gradient-main);
+      color: var(--color-white);
+    }
+
+    .message.received {
+      align-self: flex-start;
+      background: var(--color-surface);
+      color: var(--color-text);
+    }
+
+    .chat-input {
+      display: flex;
+      padding: 10px;
+      border-top: 1px solid var(--color-border);
+      background: var(--color-bg-alt);
+    }
+
+    .chat-input input {
+      flex: 1;
+      padding: 10px;
+      border-radius: 20px;
+      border: none;
+      outline: none;
+      background: var(--color-surface);
+      color: var(--color-text);
+      margin-right: 10px;
+    }
+
+    .chat-input button {
+      background: var(--color-primary);
+      border: none;
+      border-radius: 20px;
+      padding: 10px 15px;
+      color: var(--color-white);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .chat-input button:hover {
+      background: var(--color-primary-hover);
+    }
+
+  </style>
+</head>
+<body>
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">Chats</div>
+    <div class="chat-list" id="chatList"></div>
+  </div>
+
+  <!-- Chat area -->
+  <div class="chat-area">
+    <div class="chat-header" id="chatHeader">Select a chat</div>
+    <div class="messages" id="chatBox"></div>
+    <div class="chat-input">
+      <input id="message" placeholder="Type a message..." />
+      <button onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+
+  <script>
+    const socket = io("http://localhost:5000");
+
+    let userId = prompt("Enter your userId");
+    let currentConversationId = null;
+    let currentReceiverId = null;
+
+    // Load chats
+    async function loadChats() {
+      const res = await fetch(`http://localhost:5000/api/chat/conversations/${userId}`);
+      const conversations = await res.json();
+
+      const chatList = document.getElementById("chatList");
+      chatList.innerHTML = "";
+
+      conversations.forEach(conv => {
+        const partner = conv.user1Id == userId ? conv.user2 : conv.user1;
+        const div = document.createElement("div");
+        div.className = "chat-item";
+        div.innerHTML = `<b>${partner.username}</b>`;
+        div.onclick = () => openConversation(conv.id, partner.id, partner.username);
+        chatList.appendChild(div);
+      });
+    }
+
+    // Open conversation
+    async function openConversation(conversationId, partnerId, partnerName) {
+      currentConversationId = conversationId;
+      currentReceiverId = partnerId;
+
+      document.getElementById("chatHeader").textContent = partnerName;
+      document.getElementById("chatBox").innerHTML = "";
+
+      const res = await fetch(`http://localhost:5000/api/chat/messages/${conversationId}`);
+      const messages = await res.json();
+
+      messages.forEach(msg => {
+        addMessage(msg.senderId == userId ? "sent" : "received", msg.content);
+      });
+
+      socket.emit("join", conversationId);
+    }
+
+    // Add message to UI
+    function addMessage(type, content) {
+      const chatBox = document.getElementById("chatBox");
+      const div = document.createElement("div");
+      div.className = "message " + type;
+      div.textContent = content;
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    // Send message
+    function sendMessage() {
+      const content = document.getElementById("message").value;
+      if (!content.trim() || !currentReceiverId) return;
+
+      socket.emit("message", {
+        senderId: userId,
+        receiverId: currentReceiverId,
+        content
+      });
+
+      document.getElementById("message").value = "";
+    }
+
+    // Receive message
+    socket.on("message", (msg) => {
+      if (msg.conversationId === currentConversationId) {
+        addMessage(msg.senderId == userId ? "sent" : "received", msg.content);
+      }
+    });
+
+    loadChats();
+  </script>
+</body>
+</html>
